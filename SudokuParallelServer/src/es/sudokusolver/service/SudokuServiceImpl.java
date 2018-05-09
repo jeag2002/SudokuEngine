@@ -3,6 +3,7 @@ package es.sudokusolver.service;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -22,11 +23,13 @@ import com.hazelcast.core.IExecutorService;
 import com.hazelcast.core.IMap;
 import com.hazelcast.core.IQueue;
 import com.hazelcast.core.Member;
+import com.hazelcast.core.MultiExecutionCallback;
 
 import es.sudokusolver.bean.BWrapper;
 import es.sudokusolver.bean.NodeWrapper;
 import es.sudokusolver.engine.Constants;
 import es.sudokusolver.engine.DistTask;
+import es.sudokusolver.engine.DistTaskCallBack;
 
 @Service
 @CacheConfig(cacheNames = "sudokus")
@@ -140,6 +143,7 @@ public class SudokuServiceImpl implements SudokuService {
 		//create TAD keep all possible combination possible.
 		////////////////////////////////////////////////////////////////////////////
 		ArrayList<ArrayList<int[][]>> buffers = new ArrayList<ArrayList<int[][]>>();
+		
 		for(int i=0; i<rows; i++){
 			buffers.add(new ArrayList<int[][]>());
 		}
@@ -154,6 +158,13 @@ public class SudokuServiceImpl implements SudokuService {
 		boolean processed = false;
 		
 		while(!processed){
+			
+			
+			//evaluate in every steps the nodes availables
+			List<Member> activeMembers = getActiveElements();
+			numberMembers = activeMembers.size();
+			logger.info("[SudokuService] -- size active cluster members (" + numberMembers + ")");
+			
 			
 			//set all the data to all active members
 			if (numberMembers >= submatrixlist.size()){
@@ -182,32 +193,17 @@ public class SudokuServiceImpl implements SudokuService {
 				
 			}
 			
-			//execute members cluster
-			Map<Member, Future<String>> futures = executorService.submitToAllMembers(task);
-			Collection<Future<String>> results = futures.values();
-				
-		    NodeWrapper nw = queue_o.poll();
-				
-			while(nw == null){nw = queue_o.poll();}
-				
-			String data = nw.getIdNode();
-				
-			String index = data.substring(data.indexOf("_")+1, data.length());
-			int indexInt = Integer.parseInt(index);
-			buffers.get(indexInt - 1).add(nw.getData());
-				
-			logger.info("[SudokuService] index (" + indexInt + ") data (" + ArrayToString(nw.getData()) + ")");
 			
-			if (indexInt == limit){processed = true;}
+			DistTaskCallBack dTCB = new DistTaskCallBack(buffers);
+			executorService.submitToAllMembers(task, dTCB);
+			while(dTCB.getFlag()==0){Thread.sleep(100);}
+			buffers = dTCB.getBuffers();
 			
-			
-			/*
 			if (numberMembers >= submatrixlist.size()){
 				processed = true;
-			}else if (limSup >= submatrixlist.size()){
+			}else if (limInf >= rows){
 				processed = true;
 			}
-			*/
 		}
 		
 		bw = processResultsFromNodes(wrapper, buffers, rows, res_int);
@@ -221,47 +217,52 @@ public class SudokuServiceImpl implements SudokuService {
 	 * Process results from nodes
 	 */
 	
-	private BWrapper processResultsFromNodes(BWrapper wrapper, ArrayList<ArrayList<int[][]>> buffers, int nodes, int res_int){ 
+	private BWrapper processResultsFromNodes(BWrapper wrapper, ArrayList<ArrayList<int[][]>> buffers, int nodes, int res_int) throws Exception{ 
 		ArrayList<int[][]> stack = new ArrayList<int[][]>();
-		return processRecursiveNode(wrapper, buffers,stack,0,nodes,res_int);	 
+		ArrayList<BWrapper> resStack = new ArrayList<BWrapper>();
+		processRecursiveNode(wrapper, buffers,stack, resStack, 0,nodes,res_int);	
+		if (resStack.size() > 0){
+			return resStack.get(0);
+		}else{
+			return new BWrapper();
+		}
 	}
 	
 	/**
 	 * Process recursive obtained nodes
 	 */
-	private BWrapper processRecursiveNode(BWrapper wrapper, ArrayList<ArrayList<int[][]>> buffers, ArrayList<int[][]>stack, int level, int nodes, int res_int){
+	private void processRecursiveNode(BWrapper wrapper, ArrayList<ArrayList<int[][]>> buffers, ArrayList<int[][]>stack, ArrayList<BWrapper> resStack, int level, int nodes, int res_int) throws Exception{
 		
-		BWrapper bw = new BWrapper();
+
 		
 		if (level == nodes){
+			
 			int[][] matrix = stackToMatrix(stack, nodes, res_int);
 			
-			
+			logger.info("[SudokuService] processing (" + ArrayToString(matrix) + ")");
+			Thread.sleep(10);
 			
 			if (checkSudoku(matrix,nodes)){
-				logger.debug("[SudokuService] Solution FOUND! for wrapper (" + wrapper + ") result (" + ArrayToString(matrix) + ")");
+				logger.info("[SudokuService] Solution FOUND! for wrapper (" + wrapper + ") result (" + ArrayToString(matrix) + ")");
 			
+				BWrapper bw = new BWrapper();	
 				bw.setSizeX(wrapper.getSizeX());
 				bw.setSizeY(wrapper.getSizeY());
 				bw.setData(matrixToString(matrix));
 				bw.setErrMsg("Solution FOUND!");
 				bw.setRes(BWrapper.OK);
+				resStack.add(bw);
 				
-				return bw;
-			
 			}
-			
-			return bw;
 			
 		}else{
 			//-->get element from stack
 			ArrayList<int[][]> stage = buffers.get(level);
 			for(int i=0; i<stage.size(); i++){
 				stack.add(stage.get(i));
-				return processRecursiveNode(wrapper, buffers,stack,level+1,nodes, res_int);
-				//stack.remove(stage.get(i));
+				processRecursiveNode(wrapper, buffers,stack, resStack,level+1,nodes, res_int);
+				stack.remove(stage.get(i));
 			}
-			return bw;
 		}
 	}
 	

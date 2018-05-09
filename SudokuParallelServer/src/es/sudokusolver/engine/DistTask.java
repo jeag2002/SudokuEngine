@@ -1,6 +1,7 @@
 package es.sudokusolver.engine;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.concurrent.Callable;
 
 import org.slf4j.Logger;
@@ -13,7 +14,7 @@ import com.hazelcast.core.IQueue;
 import es.sudokusolver.bean.NodeWrapper;
 import es.sudokusolver.service.SudokuService;
 
-public class DistTask implements Callable<String>, Serializable, HazelcastInstanceAware{
+public class DistTask implements Callable<ArrayList<NodeWrapper>>, Serializable, HazelcastInstanceAware{
 	
 	private static final long serialVersionUID = 1L;
 
@@ -33,10 +34,10 @@ public class DistTask implements Callable<String>, Serializable, HazelcastInstan
 	
 	
 	@Override
-	public String call() throws Exception {
+	public ArrayList<NodeWrapper> call() throws Exception {
 		
 		IQueue<NodeWrapper> queue_i = hazelcastInstance.getQueue(Constants.SUDOKU_QUEUE_1);
-		IQueue<NodeWrapper> queue_o = hazelcastInstance.getQueue(Constants.SUDOKU_QUEUE_2);
+		//IQueue<NodeWrapper> queue_o = hazelcastInstance.getQueue(Constants.SUDOKU_QUEUE_2);
 		
 		NodeWrapper nW = null;
 		while (nW == null){nW = queue_i.poll();}
@@ -48,17 +49,31 @@ public class DistTask implements Callable<String>, Serializable, HazelcastInstan
 		int profundity = numProfundity(nW);
 		System.out.println("[DistTask ("+hazelcastInstance.getCluster().getLocalMember().toString()+")] -- proccesing node ID (" + nW.getIdNode() + ") data (" + ArrayToString(nW.getData()) + ") profundity (" + profundity + ")");
 		int size = nW.getData()[0].length;
-		recursiveCall(nW, nW_1, 0,0, size, profundity, queue_o);
-		return nW.getIdNode();
+		
+		ArrayList<NodeWrapper> buffer = new ArrayList<NodeWrapper>();
+		recursiveCall(nW, nW_1, 0,0, size, profundity, buffer);
+		
+		System.out.println("[DistTask ("+hazelcastInstance.getCluster().getLocalMember().toString()+")] -- node ID (" + nW.getIdNode() + ") - (" + buffer.size() + ") possible solutions");
+		
+		return buffer;
+		/*
+		for(int i=0; i<buffer.size(); i++){
+			queue_o.put(buffer.get(i));
+		}
+		*/
+		//return nW.getIdNode();
 	}
 	
-	private void recursiveCall(NodeWrapper nW, NodeWrapper nW_1, int i, int j, int size, int profundity, IQueue<NodeWrapper> queue_o) throws Exception{
+	private void recursiveCall(NodeWrapper nW, NodeWrapper nW_1, int i, int j, int size, int profundity, ArrayList<NodeWrapper> queue_o) throws Exception{
 		
 		if (j >= size){j=0;i=i+1;}
 		
 		if (profundity == 0){
-			System.out.println("[DistTask ("+hazelcastInstance.getCluster().getLocalMember().toString()+")] -- possible solution found node ID: (" + nW_1.getIdNode() + ") data: (" + ArrayToString(nW_1.getData()) + ")");
-			queue_o.put(nW_1);
+			//System.out.println("[DistTask ("+hazelcastInstance.getCluster().getLocalMember().toString()+")] -- possible solution found node ID: (" + nW_1.getIdNode() + ") data: (" + ArrayToString(nW_1.getData()) + ")");
+			NodeWrapper nWClone = new NodeWrapper();
+			nWClone.setIdNode(nW_1.getIdNode());
+			nWClone.setData(nW_1.getData());
+			queue_o.add(nWClone);
 		}else{
 			
 			if (nW.getData()[i][j] != 0){
@@ -72,6 +87,8 @@ public class DistTask implements Callable<String>, Serializable, HazelcastInstan
 					if (isValid(nW_1, i,j,size)){
 						recursiveCall(nW, nW_1, i,j+1, size, profundity-1, queue_o);
 					}
+					
+					nW_1.getData()[i][j] = 0;
 				}
 			}
 		}

@@ -32,8 +32,18 @@ public class NodeWrapper implements Serializable{
 		return data;
 	}
 
-	public void setData(int[][] data) {
-		this.data = data;
+	public void setData(int[][] _data) {
+		
+		this.data = null;
+		this.data = new int[_data[0].length][_data[0].length];
+		
+		for(int i=0; i<_data[0].length; i++){
+			for(int j=0; j<_data[0].length; j++){
+				data[i][j] = _data[i][j];
+			}
+		}
+		
+		
 	}
 
 
