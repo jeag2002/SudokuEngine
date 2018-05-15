@@ -1,0 +1,7 @@
+es\sudokusolver\bean\NodeWrapper.class
+es\sudokusolver\bean\BWrapper.class
+es\sudokusolver\engine\DistTaskCallBack.class
+es\sudokusolver\service\SudokuService.class
+es\sudokusolver\Application.class
+es\sudokusolver\config\HazelcastClusterConfig.class
+es\sudokusolver\engine\DistTask.class

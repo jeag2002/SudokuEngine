@@ -39,6 +39,14 @@ public class BWrapper implements Serializable {
 		this.errMsg = copy.getErrMsg();
 	}
 	
+	public void set(BWrapper copy){
+		this.sizeX = copy.getSizeX();
+		this.sizeY = copy.getSizeY();
+		this.data = copy.getData();
+		this.res = copy.getRes();
+		this.errMsg = copy.getErrMsg();
+	}
+	
 	
 	public String getSizeX() {
 		return sizeX;

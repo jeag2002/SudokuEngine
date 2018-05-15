@@ -9,5 +9,7 @@ public class Constants {
 	
 	public static final String SUDOKU_QUEUE_1 = "sudokuQI";
 	public static final String SUDOKU_QUEUE_2 = "sudokuQO";
+	
+	public static final String SUDOKU_QUEUE_ARRAY = "sudokuQIArray";
 
 }

@@ -1,0 +1,12 @@
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\config\HazelcastCacheConfig.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\config\HazelcastClusterConfig.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\controller\SudokuController.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\engine\DistTask.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\engine\DistTaskCallBack.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\bean\NodeWrapper.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\engine\Constants.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\engine\SolveTask.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\bean\BWrapper.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\service\SudokuService.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\service\SudokuServiceImpl.java
+C:\workspaces\workEclipse\workGrid\SudokuParallelServer\src\es\sudokusolver\Application.java

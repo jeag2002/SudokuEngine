@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,11 +26,13 @@ import com.hazelcast.core.IQueue;
 import com.hazelcast.core.Member;
 import com.hazelcast.core.MultiExecutionCallback;
 
+
 import es.sudokusolver.bean.BWrapper;
 import es.sudokusolver.bean.NodeWrapper;
 import es.sudokusolver.engine.Constants;
 import es.sudokusolver.engine.DistTask;
 import es.sudokusolver.engine.DistTaskCallBack;
+import es.sudokusolver.engine.SolveTask;
 
 @Service
 @CacheConfig(cacheNames = "sudokus")
@@ -42,6 +45,8 @@ public class SudokuServiceImpl implements SudokuService {
 
 	private IQueue<NodeWrapper> queue_i;
 	private IQueue<NodeWrapper> queue_o;
+	
+	private IExecutorService executorService;
 		
 	@Autowired
 	DistTask task;
@@ -53,6 +58,8 @@ public class SudokuServiceImpl implements SudokuService {
 		
 		BWrapper results = new BWrapper();
 		
+		long start = 0;
+		
 		try{
 			
 			queue_i = hInstance.getQueue(Constants.SUDOKU_QUEUE_1);
@@ -60,7 +67,7 @@ public class SudokuServiceImpl implements SudokuService {
 		
 			logger.info("[SudokuService] -- solveSudoku INI BWrapper ("+wrapper.toString()+")");
 			
-			
+			start = System.currentTimeMillis();
 			
 			List<Member> activeMembers = getActiveElements();
 			int numberMembers = activeMembers.size();
@@ -102,6 +109,10 @@ public class SudokuServiceImpl implements SudokuService {
 			results.setRes(BWrapper.KO);
 			results.setErrMsg(es_1.getMessage());
 		}finally{
+			
+			long end = System.currentTimeMillis();
+			logger.info("[SudokuControler] -- time spent (" + (end-start) + ") ms");
+			
 			return results;
 		}
 		
@@ -116,7 +127,7 @@ public class SudokuServiceImpl implements SudokuService {
 		
 		BWrapper bw = new BWrapper();
 		
-		IExecutorService executorService = hInstance.getExecutorService("exec");
+		executorService = hInstance.getExecutorService("exec");
 		
 		int matrix[][] = StringToMatrix(wrapper, rows);
 		
@@ -196,6 +207,7 @@ public class SudokuServiceImpl implements SudokuService {
 			
 			DistTaskCallBack dTCB = new DistTaskCallBack(buffers);
 			executorService.submitToAllMembers(task, dTCB);
+			
 			while(dTCB.getFlag()==0){Thread.sleep(100);}
 			buffers = dTCB.getBuffers();
 			
@@ -206,11 +218,91 @@ public class SudokuServiceImpl implements SudokuService {
 			}
 		}
 		
-		bw = processResultsFromNodes(wrapper, buffers, rows, res_int);
+		bw = processResultsFromNodesParallel(executorService, wrapper, buffers, rows, res_int);
 		////////////////////////////////////////////////////////////////////////////
 		
 		return bw;
 	}
+	
+	
+	/**
+	 * Process results from node parallel way 
+	 */
+	private BWrapper processResultsFromNodesParallel(
+			IExecutorService executorService, 
+			BWrapper wrapper, 
+			ArrayList<ArrayList<int[][]>> buffers, 
+			int nodes, 
+			int res_int) throws Exception{
+		
+	
+		
+		ArrayList<int[][]> array_seeds = buffers.get(0);
+		
+		boolean processed = false;
+		
+		List<Future<BWrapper>> results = new ArrayList<Future<BWrapper>>();
+		List<BWrapper> result_data = new ArrayList<BWrapper>();
+		
+		BWrapper bw = new BWrapper();
+
+		int j = 0;
+		
+		ArrayList<ArrayList<int[][]>> bufferToSolveTask = new ArrayList<ArrayList<int[][]>>();
+	    bufferToSolveTask.addAll(buffers.subList(1, buffers.size()));
+		
+		while(!processed){
+			List<Member> active_cluster = getActiveElements();
+			int size_active_cluster = active_cluster.size();
+			
+			results.clear();
+			result_data.clear();
+			
+			
+			for(int i=0; i<size_active_cluster; i++){
+				if (j < array_seeds.size()){
+					
+					logger.info("[SudokuService] res node [" + j + "] node [" + active_cluster.get(i).getUuid() + "]");
+					SolveTask sT = new SolveTask(array_seeds.get(j),bufferToSolveTask,nodes,res_int);
+					sT.setHazelcastInstance(hInstance);
+					results.add(executorService.submitToMember( sT, active_cluster.get(i)));
+					j++;
+				}
+			}
+			
+			
+			for(int z=0; z<results.size(); z++){
+				result_data.add(results.get(z).get());
+			}
+			
+			
+			
+			for(int z=0; z<result_data.size(); z++){
+				bw = result_data.get(z);
+				
+				logger.info("[SudokuService] res node [" + (j-1) + "] result [" + bw.toString() + "]");
+				
+				
+				
+				if (bw.getRes().equalsIgnoreCase(BWrapper.OK)){
+					wrapper.set(bw);
+					break;
+				}
+			}
+			
+			if (bw.getRes().equalsIgnoreCase(BWrapper.OK)){
+				processed = true;
+			}else{
+				if (j>=array_seeds.size()){processed = true;}		
+			}	
+		}
+		return wrapper;
+	}
+	
+	
+	
+	
+	
 	
 	
 	/**
@@ -260,11 +352,62 @@ public class SudokuServiceImpl implements SudokuService {
 			ArrayList<int[][]> stage = buffers.get(level);
 			for(int i=0; i<stage.size(); i++){
 				stack.add(stage.get(i));
-				processRecursiveNode(wrapper, buffers,stack, resStack,level+1,nodes, res_int);
+				
+				int[][]matrix = stackToMatrix(stack, nodes, res_int);
+				
+				if (isAValidMatrix(matrix)){
+					processRecursiveNode(wrapper, buffers,stack, resStack,level+1,nodes, res_int);
+				}else{
+					logger.debug("[SudokuService] not a valid matrix (" + ArrayToString(matrix) + ")");
+				}
+				
 				stack.remove(stage.get(i));
 			}
 		}
 	}
+	
+	
+	/**
+	 * is a valid matrix?
+	 */
+	
+	private boolean isAValidMatrix(int[][] matrix){
+		boolean res = true;
+		
+		//-->Evaluate rows
+		for(int i=0; i< matrix[0].length; i++){
+			int a[] = matrix[i];
+			for (int j=0; j<a.length; j++){
+				for(int z=j+1; z<a.length; z++){
+					if ((a[j] == a [z]) && (a[j] != 0)){
+						res = res && false;
+					}
+				}
+			}
+		}
+				
+		//-->Evaluate cols
+		if (res){
+			for(int j=0; j<matrix[0].length; j++){
+				int b[] = new int[matrix[0].length];
+				for (int l=0; l<matrix[0].length; l++){
+					b[l] = matrix[l][j];
+				}
+				
+				for(int m=0; m<matrix[0].length; m++){
+					for(int n=m+1; n<matrix[0].length; n++){
+						if ((b[m]==b[n]) && (b[n]!=0)){
+							res = res && false;
+						}
+					}
+				}
+			}
+		}			
+		
+		return res;
+	}
+	
+	
 	
 	/**
 	 * 
@@ -292,7 +435,7 @@ public class SudokuServiceImpl implements SudokuService {
 		boolean isValid = true;
 		
 		//-->Evaluate rows
-		for(int i=0; i<= matrix[0].length; i++){
+		for(int i=0; i< matrix[0].length; i++){
 			int a[] = matrix[i];
 			for(int j=1; (j<=nodes && isValid); j++){
 				isValid = false;
@@ -438,7 +581,7 @@ public class SudokuServiceImpl implements SudokuService {
 		Set<Member> all = hInstance.getCluster().getMembers();
 		List<Member> named = new ArrayList<Member>(all.size());
 		for (Member member: all) {
-			logger.info("[SudokuService] -- Active Member of cluster [" + member.toString() + "]");
+			//logger.info("[SudokuService] -- Active Member of cluster [" + member.toString() + "]");
 			named.add(member);
 		}
 		

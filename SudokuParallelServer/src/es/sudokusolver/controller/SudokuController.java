@@ -40,9 +40,7 @@ public class SudokuController {
 	@RequestMapping(value = "/resolveSudoku", method = RequestMethod.POST)
     public ResponseEntity<BWrapper> resolveSudoku(@RequestBody BWrapper requestWrapper) {
 		logger.info("[SudokuControler] -- resolveSudoku POST");
-		
 		BWrapper responseWrapper = sService.solveSudoku(requestWrapper);
-		
 		return new ResponseEntity<BWrapper>(responseWrapper, HttpStatus.OK);
     }
 	
