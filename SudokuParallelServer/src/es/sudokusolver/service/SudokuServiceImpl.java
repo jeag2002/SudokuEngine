@@ -168,8 +168,11 @@ public class SudokuServiceImpl implements SudokuService {
 		
 		boolean processed = false;
 		
+		List<int[][]>subImap = new ArrayList<int[][]>();
+		
 		while(!processed){
 			
+			int index = 0;
 			
 			//evaluate in every steps the nodes availables
 			List<Member> activeMembers = getActiveElements();
@@ -187,7 +190,7 @@ public class SudokuServiceImpl implements SudokuService {
 			//set subset data to all active members
 			}else{
 				
-				List<int[][]>subImap = submatrixlist.subList(limInf, limSup);
+				subImap = submatrixlist.subList(limInf, limSup);
 				
 				for(int i=0; i<subImap.size(); i++){
 					NodeWrapper nW = new NodeWrapper("data_"+(limInf+i+1), subImap.get(i));
@@ -199,17 +202,21 @@ public class SudokuServiceImpl implements SudokuService {
 				limSup = limInf + numberMembers;
 				
 				if (limSup > submatrixlist.size()){
-					limSup = limInf + rem;
+					limSup = limInf + rem;					
 				}
 				
 			}
 			
+			for(int i=0; i<subImap.size(); i++){
+				DistTaskCallBack dTCB = new DistTaskCallBack(buffers);
+				executorService.submitToMember(task,activeMembers.get(i),dTCB);
+				while(dTCB.getFlag()==0){Thread.sleep(100);}
+				buffers = dTCB.getBuffers();
+			}
 			
-			DistTaskCallBack dTCB = new DistTaskCallBack(buffers);
-			executorService.submitToAllMembers(task, dTCB);
-			
-			while(dTCB.getFlag()==0){Thread.sleep(100);}
-			buffers = dTCB.getBuffers();
+			//executorService.submitToAllMembers(task, dTCB);
+			//while(dTCB.getFlag()==0){Thread.sleep(100);}
+			//buffers = dTCB.getBuffers();
 			
 			if (numberMembers >= submatrixlist.size()){
 				processed = true;
@@ -258,11 +265,10 @@ public class SudokuServiceImpl implements SudokuService {
 			results.clear();
 			result_data.clear();
 			
-			
 			for(int i=0; i<size_active_cluster; i++){
 				if (j < array_seeds.size()){
 					
-					logger.info("[SudokuService] res node [" + j + "] node [" + active_cluster.get(i).getUuid() + "]");
+					logger.info("[SudokuService] create node [" + j + "] seed ["+ArrayToString(array_seeds.get(j))+"] node [" + active_cluster.get(i).getUuid() + "]");
 					SolveTask sT = new SolveTask(array_seeds.get(j),bufferToSolveTask,nodes,res_int);
 					sT.setHazelcastInstance(hInstance);
 					results.add(executorService.submitToMember( sT, active_cluster.get(i)));
@@ -280,7 +286,7 @@ public class SudokuServiceImpl implements SudokuService {
 			for(int z=0; z<result_data.size(); z++){
 				bw = result_data.get(z);
 				
-				logger.info("[SudokuService] res node [" + (j-1) + "] result [" + bw.toString() + "]");
+				logger.info("[SudokuService] response node [" + (j-(result_data.size()-z)) + "] result [" + bw.toString() + "]");
 				
 				
 				
